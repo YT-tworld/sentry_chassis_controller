@@ -1,0 +1,8 @@
+<!-- 插件详情，声明在package.xml -->
+<library path="lib/libsentry_chassis_controller">
+  <class name="sentry_chassis_controller/SentryChassisController"
+         type="sentry_chassis_controller::SentryChassisController"
+         base_class_type="controller_interface::ControllerBase">
+    <description>哨兵底盘最简控制器(速度接口,新手友好,后续可扩展PID、速度指令接收等功能)</description>
+  </class>
+</library>

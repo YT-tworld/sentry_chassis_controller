@@ -1,0 +1,18 @@
+<launch>
+<!-- 1.gazebo仿真环境加载 -->
+  <include file="$(find rm_description)/launch/sentry.launch">
+    <arg name="load_chassis" value="true"/>
+    <arg name="roller_type" value="realistic"/>
+    <arg name="paused" value="true"/>
+  </include>
+<!-- 2.控制器参数加载 -->
+  <rosparam file="$(find sentry_chassis_controller)/config/controllers.yaml" command="load"/>
+<!-- 3.控制器加载 -->
+  <node name="controller_manager_spawner" pkg="controller_manager" type="spawner" respawn="false"
+        output="screen" args="
+        controller/sentry_chassis_controller
+        controller/joint_state_controller
+        "/>
+         <!-- 配置加载的控制器 -->
+
+</launch>
