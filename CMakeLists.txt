@@ -7,15 +7,23 @@ project(sentry_chassis_controller)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  control_toolbox
+find_package(catkin REQUIRED COMPONENTS 
+  #ros_control基本依赖
   controller_interface
   hardware_interface
   pluginlib
   roscpp
   std_msgs
+  #pid优化依赖
+  control_toolbox
+  #动态参数依赖
   dynamic_reconfigure
+  #逆运动消息以来
   geometry_msgs
+  #里程计与坐标变换
+  nav_msgs
+  tf2
+  tf2_ros
 )
 
 ## System dependencies are found with CMake's conventions

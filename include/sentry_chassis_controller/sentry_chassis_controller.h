@@ -4,12 +4,18 @@
 // 速度接口核心头文件（新手友好）
 #include <controller_interface/controller.h>
 #include <hardware_interface/joint_command_interface.h> // 速度接口
+#include <pluginlib/class_list_macros.h>  // 注册插件必须
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <control_toolbox/pid.h>  // ROS官方PID类（必须加）
 #include <dynamic_reconfigure/server.h>  // 动态调参服务器
 // 自动生成的动态调参配置头文件（名字要和你的cfg文件一致）
 #include <sentry_chassis_controller/ChassisPIDConfig.h>
+#include <algorithm>
+#include <nav_msgs/Odometry.h>//里程计消息文件
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <cmath> //sin,cos
 
 namespace sentry_chassis_controller {
 
@@ -52,7 +58,30 @@ private:
   std::vector<double> target_servo;
   // 4. 动态调参服务器（支持rqt_reconfigure）
   std::shared_ptr<dynamic_reconfigure::Server<sentry_chassis_controller::ChassisPIDConfig>> dyn_server;
+  //dynamic_reconfigure::Server<sentry_chassis_controller::ChassisPIDConfig>::CallbackType dyn_cbType;//回调函数
   
+  // 5.逆运动学
+  // 逆运动学相关成员
+  ros::Subscriber cmd_vel_sub_;  // 订阅/cmd_vel话题（接收底盘速度指令）
+  double wheel_radius_;          // 轮子半径（m，从配置文件读取）
+  double wheelbase_;             // 轴距（前后轮距离，m）
+  double track_width_;           // 轮距（左右轮距离，m）
+  double max_steer_angle_;       // 舵机最大转向角（rad，默认±90度=1.57rad）
+  // 逆运动学核心函数
+  void cmdVelCallback(const geometry_msgs::Twist::ConstPtr& msg);  // /cmd_vel回调（解算转向角和转速）
+  template<typename T> T clamp(T val, T min_val, T max_val);  // 工具函数：限制值范围
+
+  // 6.里程计与tf坐标变换
+  // 新增：里程计相关成员
+  ros::Publisher odom_pub_;                  // 发布odom话题的Publisher
+  tf2_ros::TransformBroadcaster tf_broadcaster_; // 广播坐标变换的对象
+  nav_msgs::Odometry odom_msg_;              // 里程计消息载体
+  tf2::Quaternion odom_quat_;                // 存储旋转四元数（将z轴角速度转为姿态）
+  double odom_x_ = 0.0, odom_y_ = 0.0, odom_th_ = 0.0; // 里程计坐标（x/y/航向角）
+  ros::Time last_odom_time_;                 // 上一次更新里程计的时间（计算位移用）
+  // 新增：里程计核心函数声明
+  void initOdom(ros::NodeHandle& nh);        // 初始化里程计（创建Publisher等）
+  void updateOdom(const ros::Time& time, const ros::Duration& period); // 周期更新里程计
 };
 
 }  // namespace sentry_chassis_controller
