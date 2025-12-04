@@ -5,11 +5,6 @@
     <arg name="roller_type" value="realistic"/>
     <arg name="paused" value="true"/>
   </include>
-  <!-- 在launch文件中，给rm_robot_hw_sim传关节列表参数 -->
-<node name="rm_robot_hw_sim" pkg="rm_gazebo" type="rm_robot_hw_sim">
-  <!-- 从URDF中读取所有关节名称，传给硬件接口 -->
-  <param name="joint_names" value="left_front_pivot_joint left_front_wheel_joint right_front_pivot_joint right_front_wheel_joint left_back_pivot_joint left_back_wheel_joint right_back_pivot_joint right_back_wheel_joint" />
-</node>
 
 <!-- 2.控制器参数加载 -->
   <rosparam file="$(find sentry_chassis_controller)/config/controllers.yaml" command="load"/>
@@ -23,7 +18,7 @@
 <!-- 4-1. 关键节点：发布关节状态（必须！否则robot_state_publisher拿不到关节数据） -->
   <!-- <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" >
    <param name="rate" value="100" />
-  </node> -->
+  </node> -->  <!--但是gazebo已经发了所以没有必要!!!!!!-->
 <!-- 4-2. 启动robot_state_publisher：订阅/joint_states的数据自动发布关节TF变换 (依赖joint_state_publisher或gazebo的关节数据）-->
   <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />        
 <!-- 5.rviz加载 -->
