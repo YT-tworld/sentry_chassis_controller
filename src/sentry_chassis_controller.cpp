@@ -62,6 +62,13 @@ bool SentryChassisController::init(hardware_interface::EffortJointInterface* hw,
   //1-7.初始化里程计
   this->initOdom(nh);
 
+  //1-8. 新增：初始化速度模式和TF监听
+  this->initVelMode(nh);
+  // TF监听器初始化（必须在tf_buffer_之后创建，且用智能指针避免生命周期问题）
+  tf_listener_.reset(new tf2_ros::TransformListener(tf_buffer_));
+  ROS_INFO("速度模式初始化完成！当前模式：%s", is_global_vel_mode_ ? "全局坐标系" : "底盘坐标系");
+
+
   return true;  // 必须返回true，否则控制器加载失败
 }
 
@@ -154,9 +161,28 @@ T SentryChassisController::clamp(T val, T min_val, T max_val) {
 
 //cmd_vel回调函数：逆运动学解算（将底盘速度指令 → 每个轮子的转向角+转速）
 void SentryChassisController::cmdVelCallback(const geometry_msgs::Twist::ConstPtr& msg) {
-  const double v_x = msg->linear.x;
-  const double v_y = msg->linear.y;
-  const double omega_z = msg->angular.z;
+  
+  // 新增：根据模式判断是否需要转换速度
+  geometry_msgs::Twist target_vel; // 最终传入逆运动学的速度（底盘坐标系）
+  if (is_global_vel_mode_) {
+    // 全局坐标系模式：将/cmd_vel（世界坐标）转换为底盘坐标
+    if (!this->transformWorldVelToBaseVel(msg, target_vel)) {
+      // 转换失败时，使用原速度（降级为底盘坐标系）
+      target_vel = *msg;
+      ROS_WARN("全局速度转换失败，降级使用底盘坐标系速度！");
+    } else {
+      //转换成功
+      ROS_INFO_THROTTLE(1, "全局→底盘速度转换：world(vx=%.2f, vy=%.2f) → base(vx=%.2f, vy=%.2f)，yaw=%.2frad",
+                       msg->linear.x, msg->linear.y, target_vel.linear.x, target_vel.linear.y, yaw_from_tf_);
+    }
+  } else {
+    // 底盘坐标系模式：直接使用原速度
+    target_vel = *msg;
+  }
+  
+  const double v_x = target_vel.linear.x;
+  const double v_y = target_vel.linear.y;
+  const double omega_z = target_vel.angular.z;
 
   // 轮子坐标（轮子相对底盘中心坐标）
   const double LF_x = wheelbase_ / 2.0;
@@ -369,6 +395,48 @@ void SentryChassisController::updateOdom(const ros::Time& time, const ros::Durat
   // 发布坐标变换
   tf_broadcaster_.sendTransform(tf_msg);//发布的是转化后实时的两坐标系之间的位置，姿态信息
   //TF 系统的设计是 “广播 - 监听” 模式：没有专门话题，只要监听者“监听 TF 变换”，就可以收到！！！
+}
+
+
+//【六.odom坐标系下的逆运动】//
+// 新增：从配置文件读取速度模式（在.yaml中配置mode: global/base）
+void SentryChassisController::initVelMode(ros::NodeHandle& nh) {
+  std::string vel_mode;
+  // 从配置文件读取模式，默认"base"（底盘坐标系）
+  if (nh.getParam("vel_mode", vel_mode) && vel_mode == "global") {
+    is_global_vel_mode_ = true;
+  } else {
+    is_global_vel_mode_ = false;
+    // 若未配置或配置错误，打印警告并使用默认模式
+    ROS_WARN("未配置vel_mode或配置错误，默认使用底盘坐标系模式！可在配置文件中设置vel_mode: global");
+  }
+}
+// 新增：核心！！！：将世界坐标系速度转换为底盘坐标系速度
+bool SentryChassisController::transformWorldVelToBaseVel(const geometry_msgs::Twist::ConstPtr& world_vel, 
+                                                        geometry_msgs::Twist& base_vel) {
+  try {
+    // 1. 从TF缓存中获取odom→base_link的最新变换（ros::Time(0)表示最新时刻）
+    geometry_msgs::TransformStamped odom_to_base_tf = 
+      tf_buffer_.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(0.1));
+    
+    // 2. 从TF变换中提取航向角yaw（四元数→欧拉角）
+    tf2::Quaternion quat;//四元数
+    tf2::fromMsg(odom_to_base_tf.transform.rotation, quat);
+    double roll, pitch, yaw;//欧拉角
+    tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw); // 仅关注yaw（绕z轴旋转角）
+    yaw_from_tf_ = yaw; // 保存航向角，用于日志打印
+    
+    // 3. 应用速度转换公式（世界坐标系→底盘坐标系）
+    base_vel.linear.x = world_vel->linear.x * cos(yaw) + world_vel->linear.y * sin(yaw);
+    base_vel.linear.y = -world_vel->linear.x * sin(yaw) + world_vel->linear.y * cos(yaw);
+    base_vel.angular.z = world_vel->angular.z; // 旋转角速度不变
+    
+    return true; // 转换成功
+  } catch (tf2::TransformException& ex) {
+    // TF获取失败（如变换未发布、超时），打印错误并返回失败
+    ROS_ERROR("TF变换获取失败：%s（可能odom→base_link未发布）", ex.what());
+    return false;
+  }
 }
 
 

@@ -16,6 +16,10 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <cmath> //sin,cos
+#include <tf2_ros/buffer.h>   //提供tf2_ros::Buffer类的定义；
+#include <tf2_ros/transform_listener.h> //tf2_ros::TransformListener类的定义
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>   //欧拉角转换所需
 
 namespace sentry_chassis_controller {
 
@@ -79,9 +83,23 @@ private:
   tf2::Quaternion odom_quat_;                // 存储旋转四元数（将z轴角速度转为姿态）
   double odom_x_ = 0.0, odom_y_ = 0.0, odom_th_ = 0.0; // 里程计坐标（x/y/航向角）
   ros::Time last_odom_time_;                 // 上一次更新里程计的时间（计算位移用）
-  // 新增：里程计核心函数声明
+  // 里程计核心函数声明
   void initOdom(ros::NodeHandle& nh);        // 初始化里程计（创建Publisher等）
   void updateOdom(const ros::Time& time, const ros::Duration& period); // 周期更新里程计
+
+  // 7.odom里程计坐标系的逆运动实现
+  // 新增：TF监听相关（用于获取odom→base_link的变换）
+  tf2_ros::Buffer tf_buffer_;                  // TF数据缓存器（存储历史变换）
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_; // TF监听器（订阅TF变换）
+  bool is_global_vel_mode_;                    // 速度模式：true=全局坐标系，false=底盘坐标系
+  double yaw_from_tf_;                         // 从TF获取的机器人航向角（odom→base_link的yaw）
+
+  // 新增：声明速度转换函数
+  bool transformWorldVelToBaseVel(const geometry_msgs::Twist::ConstPtr& world_vel, 
+                                  geometry_msgs::Twist& base_vel);
+  // 新增：从配置文件读取速度模式
+  void initVelMode(ros::NodeHandle& nh);
+
 };
 
 }  // namespace sentry_chassis_controller
