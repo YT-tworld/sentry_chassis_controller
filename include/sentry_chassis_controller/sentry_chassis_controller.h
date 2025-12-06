@@ -20,6 +20,7 @@
 #include <tf2_ros/transform_listener.h> //tf2_ros::TransformListener类的定义
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>   //欧拉角转换所需
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace sentry_chassis_controller {
 

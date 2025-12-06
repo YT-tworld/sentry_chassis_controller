@@ -24,6 +24,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   tf2
   tf2_ros
+  #全局坐标系逆运动
+  tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -134,6 +136,7 @@ catkin_package(
 include_directories(
 include
   ${catkin_INCLUDE_DIRS}
+  ${tf2_geometry_msgs_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -164,6 +167,7 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EX
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
+  ${tf2_geometry_msgs_LIBRARIES} 
 )
 
 #############

@@ -7,18 +7,18 @@ controller:
                 "left_front_pivot_joint", "right_front_pivot_joint", "left_back_pivot_joint", "right_back_pivot_joint"]
     # 8个关节的PID参数
     pid:
-      left_front_wheel_joint:  {p: 5.0, i: 0.1, d: 0.05, i_max: 0.5, i_min: -0.5}
-      right_front_wheel_joint: {p: 5.0, i: 0.1, d: 0.05, i_max: 0.5, i_min: -0.5}
-      left_back_wheel_joint:   {p: 5.0, i: 0.1, d: 0.05, i_max: 0.5, i_min: -0.5}
-      right_back_wheel_joint:  {p: 5.0, i: 0.1, d: 0.05, i_max: 0.5, i_min: -0.5}
-      left_front_pivot_joint:  {p: 2.0, i: 0.2, d: 0.1, i_max: 1.0, i_min: -1.0}
-      right_front_pivot_joint: {p: 2.0, i: 0.2, d: 0.1, i_max: 1.0, i_min: -1.0}
-      left_back_pivot_joint:   {p: 2.0, i: 0.2, d: 0.1, i_max: 1.0, i_min: -1.0}
-      right_back_pivot_joint:  {p: 2.0, i: 0.2, d: 0.1, i_max: 1.0, i_min: -1.0}
+      left_front_wheel_joint:  {p: 2.0, i: 0.1, d: 0.0, i_max: 0.5, i_min: -0.5}
+      right_front_wheel_joint: {p: 2.0, i: 0.1, d: 0.0, i_max: 0.5, i_min: -0.5}
+      left_back_wheel_joint:   {p: 2.0, i: 0.1, d: 0.0, i_max: 0.5, i_min: -0.5}
+      right_back_wheel_joint:  {p: 2.0, i: 0.1, d: 0.0, i_max: 0.5, i_min: -0.5}
+      left_front_pivot_joint:  {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
+      right_front_pivot_joint: {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
+      left_back_pivot_joint:   {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
+      right_back_pivot_joint:  {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
 
 
     # 新增：底盘逆运动学参数（按你的实际底盘尺寸修改！）
-    wheel_radius: 0.07625        # 轮子半径（单位：m）
+    wheel_radius: 0.055       # 轮子半径（单位：m）
     wheelbase: 0.362           # 轴距（前后轮中心距离，单位：m）
     track_width: 0.362         # 轮距（左右轮中心距离，单位：m）
     max_steer_angle: 1.57    # 舵机最大转向角（单位：rad，±90度）
