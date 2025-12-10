@@ -24,8 +24,10 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   tf2
   tf2_ros
-  #全局坐标系逆运动
+  #全局坐标系逆运动(转换Twist的欧拉角和四元数)
   tf2_geometry_msgs
+  #键盘用到的ncurses库
+  # Curses
 )
 
 ## System dependencies are found with CMake's conventions
@@ -136,7 +138,7 @@ catkin_package(
 include_directories(
 include
   ${catkin_INCLUDE_DIRS}
-  ${tf2_geometry_msgs_INCLUDE_DIRS}
+  # ${CURSES_INCLUDE_DIRS}# 2. 包含ncurses的头文件目录
 )
 
 ## Declare a C++ library
@@ -152,7 +154,7 @@ add_library(${PROJECT_NAME}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/sentry_chassis_controller_node.cpp)
+add_executable(node_mykeyboard src/mykeyboard.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -167,7 +169,10 @@ add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EX
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
-  ${tf2_geometry_msgs_LIBRARIES} 
+)
+target_link_libraries(node_mykeyboard
+  ${catkin_LIBRARIES}
+  # ${CURSES_LIBRARIES} # 关键：链接ncurses库
 )
 
 #############

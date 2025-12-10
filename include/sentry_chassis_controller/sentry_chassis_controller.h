@@ -62,6 +62,7 @@ private:
   std::vector<double> target_motor;
   std::vector<double> target_servo;
   // 4. 动态调参服务器（支持rqt_reconfigure）
+  int if_dyn_change_;
   std::shared_ptr<dynamic_reconfigure::Server<sentry_chassis_controller::ChassisPIDConfig>> dyn_server;
   //dynamic_reconfigure::Server<sentry_chassis_controller::ChassisPIDConfig>::CallbackType dyn_cbType;//回调函数
   
@@ -94,12 +95,24 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_; // TF监听器（订阅TF变换）
   bool is_global_vel_mode_;                    // 速度模式：true=全局坐标系，false=底盘坐标系
   double yaw_from_tf_;                         // 从TF获取的机器人航向角（odom→base_link的yaw）
-
-  // 新增：声明速度转换函数
+  // 声明速度转换函数
   bool transformWorldVelToBaseVel(const geometry_msgs::Twist::ConstPtr& world_vel, 
                                   geometry_msgs::Twist& base_vel);
-  // 新增：从配置文件读取速度模式
+  // 从配置文件读取速度模式
   void initVelMode(ros::NodeHandle& nh);
+
+  // 8.加速度控制
+  // 存储上一时刻的速度（用于计算加速度）
+  std::vector<double> last_vel_;
+  double wheel_acc_;  //轮子最大加速度
+  double wheel_J_;    //轮子转动惯量（由硬件决定）
+  double joint_M_max_;//轮子最大扭矩（由硬件决定）
+  double car_acc_;    //车子最大加速度
+  double car_m_;      //车子质量（由硬件决定）
+
+  // 9.自锁功能
+  int if_selflock=1;    //1：开启自锁 0：关闭自锁
+  void selfLock();
 
 };
 

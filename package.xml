@@ -61,6 +61,8 @@
   <build_depend>tf2</build_depend>
   <build_depend>tf2_ros</build_depend>
   <build_depend>tf2_geometry_msgs</build_depend>
+  <build_depend>libncurses5-dev</build_depend>  <!-- 系统依赖：ncurses开发库 -->
+  <build_depend>libncursesw5-dev</build_depend>
   <build_export_depend>control_toolbox</build_export_depend>
   <build_export_depend>controller_interface</build_export_depend>
   <build_export_depend>hardware_interface</build_export_depend>
@@ -85,6 +87,9 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
+  <exec_depend>libncurses5</exec_depend>
+  <exec_depend>libncursesw5</exec_depend>
+
 
   <!-- 插件声明：告诉 ROS 这是一个 controller_interface 类型的插件 -->
   <!-- The export tag contains other, unspecified, tags -->

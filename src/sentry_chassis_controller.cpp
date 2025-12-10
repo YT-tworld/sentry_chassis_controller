@@ -31,6 +31,8 @@ bool SentryChassisController::init(hardware_interface::EffortJointInterface* hw,
   }
 
   // 1-4. 初始化动态调参服务器（支持rqt_reconfigure），要在堆上new否则，init后服务器就被销毁了
+  nh.param<int>("if_dyn_change", if_dyn_change_, 0);
+  ROS_INFO("if_dyn_change:%d",if_dyn_change_);
   dyn_server.reset(new dynamic_reconfigure::Server<sentry_chassis_controller::ChassisPIDConfig>(nh));
   // // 绑定回调函数：把 dynParamCallback 绑定到服务器
   // // 用 std::bind 把成员函数和 this 指针绑定（关键！让服务器能找到这个函数）
@@ -49,7 +51,7 @@ bool SentryChassisController::init(hardware_interface::EffortJointInterface* hw,
 
   //1-6.逆运动学
   // 读取底盘参数（从配置文件.yaml读取，无则用默认值）
-  nh.param<double>("wheel_radius", wheel_radius_, 0.009);        // 轮子半径默认0.1m
+  nh.param<double>("wheel_radius", wheel_radius_, 0.055);        // 轮子半径默认0.1m
   nh.param<double>("wheelbase", wheelbase_, 0.362);             // 轴距默认0.5m
   nh.param<double>("track_width", track_width_,  0.362);         // 轮距默认0.4m
   nh.param<double>("max_steer_angle", max_steer_angle_, 1.57); // 舵机最大角度默认±90度（1.57rad）
@@ -62,42 +64,77 @@ bool SentryChassisController::init(hardware_interface::EffortJointInterface* hw,
   //1-7.初始化里程计
   this->initOdom(nh);
 
-  //1-8. 新增：初始化速度模式和TF监听
+  //1-8.初始化速度模式和TF监听
   this->initVelMode(nh);
   // TF监听器初始化（必须在tf_buffer_之后创建，且用智能指针避免生命周期问题）
   tf_listener_.reset(new tf2_ros::TransformListener(tf_buffer_));
   ROS_INFO("速度模式初始化完成！当前模式：%s", is_global_vel_mode_ ? "全局坐标系" : "底盘坐标系");
 
-
+  //1-9.初始化加速度
+  nh.param<double>("wheel_acc", wheel_acc_, 1); 
+  nh.param<double>("wheel_J", wheel_J_, 1); 
+  nh.param<double>("joint_M_max", joint_M_max_, 1); 
+  nh.param<double>("car_acc", car_acc_, 1); 
+  nh.param<double>("car_m", car_m_, 1); 
+  ROS_INFO("(wheel_acc_=%.7f",wheel_acc_);
+  //last_vel_.resize(4, 0.0);
+  
   return true;  // 必须返回true，否则控制器加载失败
 }
 
 //【二.更新】//
 void SentryChassisController::update(const ros::Time& time, const ros::Duration& period) {
   static int count = 0;
-  const int print_interval = 200;  // 100Hz控制频率 → 每100帧（1秒）打印一次
-  if (++count % print_interval == 0) {
+  if (++count % 400 == 0) {// 100Hz控制频率 → 每100帧（1秒）打印一次
      ROS_INFO("controller is running now!!!!!!!"); 
      ROS_INFO("target参数:电机1=%.2f,电机2=%.2f,电机3=%.2f,电机4=%.2f",target_motor[0],target_motor[1],target_motor[2],target_motor[3]);
      ROS_INFO("target参数:舵机1=%.2f,舵机2=%.2f,舵机3=%.2f,舵机4=%.2f",target_servo[0],target_servo[1],target_servo[2],target_servo[3]);
   }
-  // //2-1.读取动态参数
-  //this->dynParamRead();
-  // //2-2.新增：调用里程计更新（周期100Hz，与控制频率一致）
+  //2-1.读取动态参数
+  if (if_dyn_change_==1&&++count % 50 == 0) {// 100Hz控制频率 → 每100帧（1秒）打印一次
+    this->dynParamRead();
+  }
+  //2-2.调用里程计更新（周期100Hz，与控制频率一致）
   this->updateOdom(time, period); 
-  //2-3.遍历8个关节，逐个执行PID控制
+  //2-3.新增：自锁功能
+  this->selfLock();
+  //2-4.遍历8个关节，逐个执行PID控制  
   for (int i = 0; i < 4; ++i) 
   {
     // 1. 读取关节当前电机角速度，舵机以一个固定点为起始转过角度
     double current_vel = joint_handles_[i].getVelocity();
     double current_position =joint_handles_[i+4].getPosition();
-    // 2. 计算速度误差（期望速度 - 当前速度）
-    double error_v =target_motor[i] - current_vel; //8- current_vel;//
-    ROS_INFO("目标转速：%.2f;当前转速：%.2f",target_motor[i] ,current_vel);
-    double error_p = target_servo[i] - current_position;
+    // 2. 计算角速度误差（期望角速度 - 当前角速度）
+    double error_v =target_motor[i] - current_vel; 
+    //ROS_INFO("目标转速：%.2f;当前转速：%.2f",target_motor[i] ,current_vel);
+    double error_p =target_servo[i] - current_position;    
+
+    // // 2*. 加速度控制
+    // double delta_v =(current_vel - last_vel_[i])*wheel_radius_;//速度变化
+    // double actual_acc = delta_v / period.toSec();              //实际加速度 a=dv/dt
+    // last_vel_[i] = current_vel;
+    // double error_acc = target_acc_ - actual_acc;                //加速度环：计算最终控制量（期望加速度-实际加速度→PID输出控制量）
+    //ROS_INFO("目标加速度：%.2f;当前加速度：%.2f;时间间隔：%.4f",target_acc_ ,actual_acc,period.toSec());
+    //ROS_INFO("加速度误差：%.2f",error_acc);
+    //double pid_v = pid_controllers_[i].computeCommand(error_acc, period);//加速度控制
+
     // 3. 执行PID计算，得到控制量
-    double pid_v = pid_controllers_[i].computeCommand(error_v, period);
+    double pid_v = pid_controllers_[i].computeCommand(error_v, period);//角速度控制
     double pid_p = pid_controllers_[i+4].computeCommand(error_p, period);
+    // 3*.加速度控制
+    double wheel_M;
+    if(fabs(wheel_acc_) > 1e-6){//控制轮子线加速度
+      wheel_M=(wheel_acc_/wheel_radius_)*wheel_J_;//扭矩=角加速度*转动惯量//角加速度=线加速度/半径
+      //ROS_INFO("(1)wheel_M=%.4f",wheel_M);
+    }
+    else{//控制车子加速度
+      wheel_M=(car_m_*car_acc_)/4*wheel_radius_;
+      //ROS_INFO("(2)wheel_M=%.4f",wheel_M);
+    }
+    pid_v = clamp<double>(pid_v,-wheel_M, wheel_M);//控制加速度（由人为决定）
+    
+    pid_v = clamp<double>(pid_v,-joint_M_max_, joint_M_max_);//限制扭曲输出(由硬件决定)
+    //ROS_INFO("当前电机%d扭矩电pid:%.2f",i,pid_v);
     // 4. 将控制量PID发送给关节
     joint_handles_[i].setCommand(pid_v);
     joint_handles_[i+4].setCommand(pid_p);
@@ -147,9 +184,9 @@ void SentryChassisController::dynParamRead()
   // 更新电机组PID参数（4个电机共用一套参数）,舵机组PID参数（4个舵机共用一套参数）
   for (int i = 0; i < 4; ++i) {
     pid_controllers_[i].initPid(Kp_motor, Ki_motor, Kd_motor, i_clamp_motor, -i_clamp_motor);
-    //target_motor[i] = target_motor_all;//rqt_plot调pid用的
+    target_motor[i] = target_motor_all;//rqt_plot调pid用的
     pid_controllers_[i+4].initPid(Kp_servo, Ki_servo, Kd_servo, i_clamp_servo, -i_clamp_servo);
-    //target_servo[i] = target_servo_all;
+    target_servo[i] = target_servo_all;
   }
 }
 
@@ -162,7 +199,6 @@ T SentryChassisController::clamp(T val, T min_val, T max_val) {
 
 //cmd_vel回调函数：逆运动学解算（将底盘速度指令 → 每个轮子的转向角+转速）
 void SentryChassisController::cmdVelCallback(const geometry_msgs::Twist::ConstPtr& msg) {
-  
   // 新增：根据模式判断是否需要转换速度
   geometry_msgs::Twist target_vel; // 最终传入逆运动学的速度（底盘坐标系）
   if (is_global_vel_mode_) {
@@ -184,6 +220,9 @@ void SentryChassisController::cmdVelCallback(const geometry_msgs::Twist::ConstPt
   const double v_x = target_vel.linear.x;
   const double v_y = target_vel.linear.y;
   const double omega_z = target_vel.angular.z;
+  //新增：自锁功能
+  if_selflock=0;
+  if(fabs(v_x)<1e-6&&fabs(v_y)<1e-6&&fabs(omega_z)<1e-6) if_selflock=1;
 
   // 轮子坐标（轮子相对底盘中心坐标）
   const double LF_x = wheelbase_ / 2.0;
@@ -278,10 +317,11 @@ void SentryChassisController::cmdVelCallback(const geometry_msgs::Twist::ConstPt
   target_motor[2] = LR_vel;   // 左后：负（顺时针）
   target_motor[3] = RR_vel;   // 右后：正（逆时针）
   //ROS_INFO("发布转速：%.2f;得到转速：%.2f",LF_vel,joint_handles_[0].getVelocity());
+  
 }
 
 //【五.里程计与tf坐标变换】//
-//新增：里程计初始化函数
+//里程计初始化函数
 void SentryChassisController::initOdom(ros::NodeHandle& nh) {
   // 1. 创建odom话题发布者（队列大小10， latch=true确保新节点能获取历史数据）
   odom_pub_ = nh.advertise<nav_msgs::Odometry>("/odom", 10, true);
@@ -304,14 +344,14 @@ void SentryChassisController::initOdom(ros::NodeHandle& nh) {
 
   ROS_INFO("里程计初始化成功！将发布 /odom 话题和 odom→base_link 坐标变换");
 }
-// 新增：里程计周期更新函数（正运动学解算和里程计更新）
+// 里程计周期更新函数（正运动学解算和里程计更新）
 void SentryChassisController::updateOdom(const ros::Time& time, const ros::Duration& period) {
   // 1. 读取4个轮子的实际速度（从关节句柄获取，索引0-3是电机）
   double LF_vel = joint_handles_[0].getVelocity();  // 左前电机实际角速度（rad/s）
   double RF_vel = joint_handles_[1].getVelocity();  // 右前电机实际角速度
   double LR_vel = joint_handles_[2].getVelocity();  // 左后电机实际角速度
   double RR_vel = joint_handles_[3].getVelocity();  // 右后电机实际角速度
-  ROS_INFO("得到转速：%.2f",joint_handles_[0].getVelocity());
+  //ROS_INFO("得到转速：%.2f",joint_handles_[0].getVelocity());
 
   // 2. 轮子角速度 → 线速度（v = ω × r）
   double LF_lin_vel = LF_vel * wheel_radius_;
@@ -340,13 +380,25 @@ void SentryChassisController::updateOdom(const ros::Time& time, const ros::Durat
   //正运动学解算核心!!!
   double vx=(LF_vel_x+RF_vel_x+LR_vel_x+RR_vel_x)/4;//底盘中心速度
   double vy=(LF_vel_y+RF_vel_y+LR_vel_y+RR_vel_y)/4;
-  double omega_z_LF =-(vy-LF_vel_y)/LF_x;
-  double omega_z_RF =-(vy-RF_vel_y)/RF_x;
-  double omega_z_LR =-(vy-LR_vel_y)/LR_x;
-  double omega_z_RR =-(vy-RR_vel_y)/RR_x;//const double ICC_x = -v_y / omega_z;//轨迹圆心点相对于底盘中心点坐标
-  //由这两个公式推导而出：                  //const double LF_vy = -(ICC_x-LF_x)*omega_z;
-  double omega_z=(omega_z_LF+omega_z_RF+omega_z_LR+omega_z_RR)/4;
-  ROS_INFO("正运动求解:v_x=%.2f;v_y=%.2f;w=%.2f",vx,vy,omega_z);
+
+  double omega_z_LF_y = (vx-LF_vel_x)/LF_y;
+  double omega_z_RF_y = (vx-RF_vel_x)/RF_y;
+  double omega_z_LR_y = (vx-LR_vel_x)/LR_y;
+  double omega_z_RR_y = (vx-RR_vel_x)/RR_y;
+  double omega_z_LF_x =-(vy-LF_vel_y)/LF_x;
+  double omega_z_RF_x =-(vy-RF_vel_y)/RF_x;
+  double omega_z_LR_x =-(vy-LR_vel_y)/LR_x;
+  double omega_z_RR_x =-(vy-RR_vel_y)/RR_x;//const double ICC_x = -v_y / omega_z;//轨迹圆心点相对于底盘中心点坐标
+  //由这两个公式推导而出：                     //const double LF_vy = -(ICC_x-LF_x)*omega_z;
+  double omega_z=(omega_z_LF_x+omega_z_RF_x+omega_z_LR_x+omega_z_RR_x+
+                  omega_z_LF_y+omega_z_RF_y+omega_z_LR_y+omega_z_RR_y)/8;
+ 
+  //打印信息
+  static int count2 = 0;
+  const int print_interval = 400;  // 100Hz控制频率 → 每100帧（1秒）打印一次
+  if (++count2 % print_interval == 0) {
+        ROS_INFO("正运动求解:v_x=%.2f;v_y=%.2f;w=%.2f",vx,vy,omega_z);
+  }
 
   // 4. 计算位移和姿态变化（积分：速度 × 时间）
   double dt = period.toSec();  // 时间间隔（控制器更新周期，默认100Hz→0.01s）
@@ -402,7 +454,7 @@ void SentryChassisController::updateOdom(const ros::Time& time, const ros::Durat
 
 
 //【六.odom坐标系下的逆运动】//
-// 新增：从配置文件读取速度模式（在.yaml中配置mode: global/base）
+// 从配置文件读取速度模式（在.yaml中配置mode: global/base）
 void SentryChassisController::initVelMode(ros::NodeHandle& nh) {
   std::string vel_mode;
   // 从配置文件读取模式，默认"base"（底盘坐标系）
@@ -414,17 +466,16 @@ void SentryChassisController::initVelMode(ros::NodeHandle& nh) {
     ROS_WARN("未配置vel_mode或配置错误，默认使用底盘坐标系模式！可在配置文件中设置vel_mode: global");
   }
 }
-// 新增：核心！！！：将世界坐标系速度转换为底盘坐标系速度
+// 核心！！！：将世界坐标系速度转换为底盘坐标系速度
 bool SentryChassisController::transformWorldVelToBaseVel(const geometry_msgs::Twist::ConstPtr& world_vel, 
                                                         geometry_msgs::Twist& base_vel) {
   try {
     // 1. 从TF缓存中获取odom→base_link的最新变换（ros::Time(0)表示最新时刻）
     // geometry_msgs::TransformStamped odom_to_base_tf = 
     //   tf_buffer_.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(0.1));
-    
     // // 2. 从TF变换中提取航向角yaw（四元数→欧拉角）
     // tf2::Quaternion quat;//四元数
-    // tf2::fromMsg(odom_to_base_tf.transform.rotation, quat);
+    // tf2::fromMsg(odom_to_base_tf.transform.rotation, quat);//提取四元数
     // double roll, pitch, yaw;//欧拉角
     // tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw); // 仅关注yaw（绕z轴旋转角）
     double yaw=yaw_from_tf_; // 保存航向角，用于日志打印
@@ -443,6 +494,16 @@ bool SentryChassisController::transformWorldVelToBaseVel(const geometry_msgs::Tw
 }
 
 
+//【七.自锁功能】//
+void SentryChassisController::selfLock(){
+  if(if_selflock&& joint_handles_[0].getVelocity()<1e-3&&joint_handles_[1].getVelocity()<1e-3
+  &&joint_handles_[2].getVelocity()<1e-3&&joint_handles_[3].getVelocity()<1e-3){
+    target_servo[0]= M_PI / 4;
+    target_servo[1]=-M_PI / 4;
+    target_servo[2]=-M_PI / 4;
+    target_servo[3]= M_PI / 4;
+  }
+}
 
 }  // namespace sentry_chassis_controller
 

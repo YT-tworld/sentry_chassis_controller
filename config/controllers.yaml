@@ -16,19 +16,31 @@ controller:
       left_back_pivot_joint:   {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
       right_back_pivot_joint:  {p: 1.0, i: 0.0, d: 0.0, i_max: 1.0, i_min: -1.0}
 
-
-    # 新增：底盘逆运动学参数（按你的实际底盘尺寸修改！）
+    #是否动态调参
+    if_dyn_change: 0          #1为启用动态调参
+    # 底盘逆运动学参数（按你的实际底盘尺寸修改！）
     wheel_radius: 0.055       # 轮子半径（单位：m）
     wheelbase: 0.362           # 轴距（前后轮中心距离，单位：m）
     track_width: 0.362         # 轮距（左右轮中心距离，单位：m）
     max_steer_angle: 1.57    # 舵机最大转向角（单位：rad，±90度）
-    # 新增：速度模式配置（global=全局坐标系，base=底盘坐标系）
+    # 速度模式配置（global=全局坐标系，base=底盘坐标系）
     vel_mode: "base"       # 可根据需求切换，测试时建议先设为"base"验证基础功能
+    # 加速度配置
+    joint_M_max: 3         #最大扭矩   （由硬件决定）
+    wheel_J: 6.846e-4      #轮子转动惯量（由硬件决定）
+    car_m: 10.69           #车子质量kg （由硬件决定）
+    wheel_acc: 0           #轮子最大线加速度（人为控制） 最大241  M=a*I(扭矩=角加速度*转动惯量)
+    car_acc: 14            #车子最大加速度  （人为控制）最大20.4 *whell_acc设为0时才可设置
 
   joint_state_controller:
     type: joint_state_controller/JointStateController
     publish_rate: 100
 
+#键盘控制参数
+mykeyboard:
+  max_linear_speed:  1
+  max_angular_speed: 2
+  cmd_vel_topic: /mycmd_vel
 
 
 

@@ -22,7 +22,7 @@
 <!-- 4-2. 启动robot_state_publisher：订阅/joint_states的数据自动发布关节TF变换 (依赖joint_state_publisher或gazebo的关节数据）-->
   <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />        
 <!-- 5.rviz加载 -->
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find sentry_chassis_controller)/config/controller_rviz.rviz"/>       
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find sentry_chassis_controller)/config/rviz.rviz"/>       
          
 
 </launch>
