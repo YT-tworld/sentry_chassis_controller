@@ -114,6 +114,11 @@ private:
   int if_selflock=1;    //1：开启自锁 0：关闭自锁
   void selfLock();
 
+  // 10.陀螺功能
+  int if_spinning_=0;    //1:开启陀螺功能呢个 0：关闭
+  double spinning_w_;   //旋转速度
+  void spinning_run();
+
 };
 
 }  // namespace sentry_chassis_controller

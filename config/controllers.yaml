@@ -31,6 +31,9 @@ controller:
     car_m: 10.69           #车子质量kg （由硬件决定）
     wheel_acc: 0           #轮子最大线加速度（人为控制） 最大241  M=a*I(扭矩=角加速度*转动惯量)
     car_acc: 14            #车子最大加速度  （人为控制）最大20.4 *whell_acc设为0时才可设置
+    # 陀螺模式配置
+    if_spinning: 0         #1为开启
+    spinnning_w: 15        #旋转速度
 
   joint_state_controller:
     type: joint_state_controller/JointStateController
@@ -38,8 +41,8 @@ controller:
 
 #键盘控制参数
 mykeyboard:
-  max_linear_speed:  1
-  max_angular_speed: 2
+  max_linear_speed:  0.6
+  max_angular_speed: 0.8
   cmd_vel_topic: /mycmd_vel
 
 

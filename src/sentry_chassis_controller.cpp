@@ -78,6 +78,10 @@ bool SentryChassisController::init(hardware_interface::EffortJointInterface* hw,
   nh.param<double>("car_m", car_m_, 1); 
   ROS_INFO("(wheel_acc_=%.7f",wheel_acc_);
   //last_vel_.resize(4, 0.0);
+
+  //1-10.陀螺模式
+  nh.param<int>("if_spinning", if_spinning_, 0); 
+  nh.param<double>("spinning_w", spinning_w_, 6); 
   
   return true;  // 必须返回true，否则控制器加载失败
 }
@@ -96,9 +100,11 @@ void SentryChassisController::update(const ros::Time& time, const ros::Duration&
   }
   //2-2.调用里程计更新（周期100Hz，与控制频率一致）
   this->updateOdom(time, period); 
-  //2-3.新增：自锁功能
+  //2-3.自锁功能
   this->selfLock();
-  //2-4.遍历8个关节，逐个执行PID控制  
+  //2-4.新增：陀螺功能
+  this->spinning_run();
+  //2-5.遍历8个关节，逐个执行PID控制  
   for (int i = 0; i < 4; ++i) 
   {
     // 1. 读取关节当前电机角速度，舵机以一个固定点为起始转过角度
@@ -219,10 +225,25 @@ void SentryChassisController::cmdVelCallback(const geometry_msgs::Twist::ConstPt
   
   const double v_x = target_vel.linear.x;
   const double v_y = target_vel.linear.y;
-  const double omega_z = target_vel.angular.z;
+  double omega_z = target_vel.angular.z;
   //新增：自锁功能
   if_selflock=0;
   if(fabs(v_x)<1e-6&&fabs(v_y)<1e-6&&fabs(omega_z)<1e-6) if_selflock=1;
+  //新增：陀螺功能
+  ros::NodeHandle nh("/controller/sentry_chassis_controller");
+  if(target_vel.angular.x==1)if_spinning_=1;  //键盘切换陀螺模式
+  else if(target_vel.angular.x==2){           //取消陀螺模式
+    if_spinning_=0;
+    nh.setParam("vel_mode","base");
+    is_global_vel_mode_ = false;
+  }
+  else if(target_vel.angular.x==3){           //切换成全局坐标系
+    nh.setParam("vel_mode","global");
+    is_global_vel_mode_ = true;
+  }
+
+  if(if_spinning_)omega_z=spinning_w_;
+  ROS_INFO("target_vel.angular.x=%.2f",target_vel.angular.x);
 
   // 轮子坐标（轮子相对底盘中心坐标）
   const double LF_x = wheelbase_ / 2.0;
@@ -484,7 +505,9 @@ bool SentryChassisController::transformWorldVelToBaseVel(const geometry_msgs::Tw
     base_vel.linear.x =  world_vel->linear.x * cos(yaw) + world_vel->linear.y * sin(yaw);
     base_vel.linear.y = -world_vel->linear.x * sin(yaw) + world_vel->linear.y * cos(yaw);
     base_vel.angular.z = world_vel->angular.z; // 旋转角速度不变
-    
+
+    base_vel.angular.x = world_vel->angular.x; // 用于陀螺模式
+
     return true; // 转换成功
   } catch (tf2::TransformException& ex) {
     // TF获取失败（如变换未发布、超时），打印错误并返回失败
@@ -503,6 +526,20 @@ void SentryChassisController::selfLock(){
     target_servo[2]=-M_PI / 4;
     target_servo[3]= M_PI / 4;
   }
+}
+
+//【八.陀螺功能】//
+void SentryChassisController::spinning_run()
+{
+  ros::NodeHandle nh("/controller/sentry_chassis_controller");
+  //nh.param<int>("if_spinning",if_spinning_,0);
+  if(if_spinning_)
+  {
+    nh.setParam("vel_mode","global");
+    is_global_vel_mode_ = true;//更换成全局坐标系
+  }
+  //ROS_INFO("if_spinning=%d",if_spinning_);
+ 
 }
 
 }  // namespace sentry_chassis_controller

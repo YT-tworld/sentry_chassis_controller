@@ -55,15 +55,20 @@ bool init_terminal() {
 
 
 // 处理键盘输入并更新速度指令
+int if_sendcmd;//当没有按键按下时，不发送命令
+bool has_t = false;//陀螺模式
+bool has_y = false;
+bool has_u = false;
 void handle_keyboard_input(geometry_msgs::Twist& twist) {
     char key[16];//最多读16个字符
     // 非阻塞读取键盘输入
     ssize_t read_len = read(STDIN_FILENO, key, sizeof(key));//chae是1字节，sizeof()得到的是字节长度
     // 初始化按键状态标志
     bool has_w = false, has_s = false, has_a = false, has_d = false, has_q = false, has_e = false,has_out=false;
-
+    if_sendcmd=0;
     // 仅处理实际读取到的字符
     if (read_len > 0) {
+        if_sendcmd=1;
         //重置速度
         twist.linear.x = 0.0;
         twist.linear.y = 0.0;
@@ -77,6 +82,9 @@ void handle_keyboard_input(geometry_msgs::Twist& twist) {
                 case 'd': case 'D': has_d = true; break;
                 case 'q': case 'Q': has_q = true; break;
                 case 'e': case 'E': has_e = true; break;
+                case 't': case 'T': has_t = true; has_y = false;has_u = false;break;//陀螺模式
+                case 'y': case 'Y': has_y = true; has_u = false;break;//初始模式
+                case 'u': case 'U': has_u = true; break;//全局坐标系模式
                 case '\x03': has_out = true; break;// Ctrl+C（ASCII码3）
                 default: break;
             }
@@ -92,54 +100,14 @@ void handle_keyboard_input(geometry_msgs::Twist& twist) {
     if (has_d) twist.linear.y -= max_linear_speed;
     if (has_q) twist.angular.z += max_angular_speed;
     if (has_e) twist.angular.z -= max_angular_speed;
+    if (has_t) twist.angular.x =1;//陀螺模式
+    if (has_y) twist.angular.x =2;//取消陀螺模式
+    if (has_u) twist.angular.x =3;//全局坐标系
+    //ROS_INFO("twist.angular.x=%.2f",twist.angular.x);
     if (has_out) sig_handler(SIGINT);
 }
 
 
-
-
-// // 处理键盘输入并更新速度指令
-// void handle_keyboard_input(geometry_msgs::Twist& twist) {
-//     char key;
-//     // 非阻塞读取键盘输入
-//     ssize_t read_len = read(STDIN_FILENO, &key, 1);
-//     if (read_len > 0) {
-//         // 重置速度（默认停止）
-//         twist.linear.x = 0.0;
-//         twist.linear.y = 0.0;
-//         twist.angular.z = 0.0;
-//         // 处理按键
-//         switch (key) {
-//             case 'w': case 'W':
-//                 twist.linear.x = max_linear_speed; // 前进
-//                 break;
-//             case 's': case 'S':
-//                 twist.linear.x = -max_linear_speed; // 后退
-//                 break;
-//             case 'a': case 'A':
-//                 twist.linear.y = max_linear_speed; // 左移
-//                 break;
-//             case 'd': case 'D':
-//                 twist.linear.y = -max_linear_speed; // 右移
-//                 break;
-//             case 'q': case 'Q':
-//                 twist.angular.z = max_angular_speed; // 逆时针旋转（左转）
-//                 break;
-//             case 'e': case 'E':
-//                 twist.angular.z = -max_angular_speed; // 顺时针旋转（右转）
-//                 break;
-//             case ' ':
-//                 // 空格停止（速度保持0）
-//                 break;
-//             case '\x03': // Ctrl+C（ASCII码3）
-//                 sig_handler(SIGINT);
-//                 break;
-//             default:
-//                 // 未知按键，保持停止
-//                 break;
-//         }
-//     }
-// }
 
 int main(int argc, char** argv) {
     // 初始化ROS节点
@@ -185,6 +153,7 @@ int main(int argc, char** argv) {
         // 处理键盘输入
         handle_keyboard_input(twist);
         // 发布速度指令
+        if(if_sendcmd)
         cmd_vel_pub.publish(twist);
         // 循环频率控制
         loop_rate.sleep();
